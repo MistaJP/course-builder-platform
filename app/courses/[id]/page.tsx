@@ -270,6 +270,7 @@ export default function CourseEditorPage() {
       })
       
       xhr.addEventListener('load', () => {
+        console.log('Upload response:', xhr.status, xhr.responseText)
         if (xhr.status === 200) {
           setUploadingVideos(prev => 
             prev.map(v => v.id === uploadingVideo.id ? { ...v, status: 'processing', progress: 100 } : v)
@@ -280,15 +281,17 @@ export default function CourseEditorPage() {
           
           queryClient.invalidateQueries({ queryKey: ['course', courseId] })
         } else {
+          console.error('Upload failed:', xhr.status, xhr.responseText)
           setUploadingVideos(prev => 
-            prev.map(v => v.id === uploadingVideo.id ? { ...v, status: 'error' } : v)
+            prev.map(v => v.id === uploadingVideo.id ? { ...v, status: 'error', error: `HTTP ${xhr.status}` } : v)
           )
         }
       })
       
-      xhr.addEventListener('error', () => {
+      xhr.addEventListener('error', (e) => {
+        console.error('Upload network error:', e)
         setUploadingVideos(prev => 
-          prev.map(v => v.id === uploadingVideo.id ? { ...v, status: 'error' } : v)
+          prev.map(v => v.id === uploadingVideo.id ? { ...v, status: 'error', error: 'Network error' } : v)
         )
       })
 
