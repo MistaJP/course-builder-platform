@@ -288,6 +288,13 @@ export default function CourseEditorPage() {
               <span className={`text-sm ${course.published ? 'text-green-600' : 'text-gray-500'}`}>
                 {course.published ? 'Published' : 'Draft'}
               </span>
+              <Link
+                href={`/course/${courseId}`}
+                target="_blank"
+                className="px-4 py-2 rounded-lg font-medium bg-purple-100 text-purple-700 hover:bg-purple-200"
+              >
+                Preview Course
+              </Link>
               <button
                 onClick={() => publishMutation.mutate(!course.published)}
                 disabled={course.videos.length === 0}
