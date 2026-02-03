@@ -52,6 +52,7 @@ interface UploadingVideo {
   uploadUrl: string
   progress: number
   status: 'uploading' | 'processing' | 'done' | 'error'
+  error?: string
 }
 
 async function fetchCourse(id: string): Promise<Course> {
@@ -428,7 +429,7 @@ export default function CourseEditorPage() {
                       'text-blue-600'
                     }`}>
                       {video.status === 'done' ? '✓ Ready' :
-                       video.status === 'error' ? '✗ Failed' :
+                       video.status === 'error' ? `✗ Failed ${(video as any).error || ''}` :
                        video.status === 'processing' ? 'Processing...' :
                        `${video.progress}%`}
                     </span>
