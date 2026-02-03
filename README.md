@@ -1,4 +1,4 @@
-# Course Builder Studio
+# Course Builder Studio 
 
 A web-based platform for creating, storing, and distributing video-based e-learning courses.
 
