@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 
@@ -55,17 +55,32 @@ function formatTotalDuration(videos: Video[]): string {
   return `${mins} min`
 }
 
-export default function CoursePreviewPage({ params }: { params: { id: string } }) {
+export default function CoursePreviewPage({ params }: { params: Promise<{ id: string }> }) {
   const [activeTab, setActiveTab] = useState('overview')
-  const { data: course, isLoading } = useQuery({
-    queryKey: ['course-preview', params.id],
-    queryFn: () => fetchCourse(params.id)
+  const [resolvedParams, setResolvedParams] = useState<{ id: string } | null>(null)
+  
+  useEffect(() => {
+    params.then(setResolvedParams)
+  }, [params])
+  
+  const { data: course, isLoading, error } = useQuery({
+    queryKey: ['course-preview', resolvedParams?.id],
+    queryFn: () => fetchCourse(resolvedParams!.id),
+    enabled: !!resolvedParams?.id
   })
 
-  if (isLoading) {
+  if (isLoading || !resolvedParams) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-gray-600">Loading course...⏳</div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-red-600">Error: {(error as Error).message}</div>
       </div>
     )
   }
