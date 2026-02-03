@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -146,7 +146,8 @@ export default function CourseEditorPage() {
   const courseId = params.id as string
   const [showAddVideo, setShowAddVideo] = useState(false)
   const [newVideoTitle, setNewVideoTitle] = useState('')
-  const [newVideoBunnyId, setNewVideoBunnyId] = useState('')
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
 
   const { data: course, isLoading } = useQuery({
     queryKey: ['course', courseId],
@@ -181,21 +182,20 @@ export default function CourseEditorPage() {
     }
   })
 
-  const addVideoMutation = useMutation({
-    mutationFn: async (data: { title: string; bunnyId: string; courseId: string }) => {
-      const res = await fetch('/api/videos', {
+  const createVideoMutation = useMutation({
+    mutationFn: async ({ title, courseId }: { title: string; courseId: string }) => {
+      const res = await fetch('/api/bunny/videos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: JSON.stringify({ title, courseId })
       })
-      if (!res.ok) throw new Error('Failed to add video')
+      if (!res.ok) throw new Error('Failed to create video')
       return res.json()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['course', courseId] })
       setShowAddVideo(false)
       setNewVideoTitle('')
-      setNewVideoBunnyId('')
     }
   })
 
@@ -214,13 +214,45 @@ export default function CourseEditorPage() {
     }
   }
 
-  const handleAddVideo = () => {
-    if (!newVideoTitle || !newVideoBunnyId) return
-    addVideoMutation.mutate({
+  const handleCreateVideo = () => {
+    if (!newVideoTitle) return
+    createVideoMutation.mutate({
       title: newVideoTitle,
-      bunnyId: newVideoBunnyId,
       courseId
     })
+  }
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, videoId: string) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setIsUploading(true)
+    setUploadProgress(0)
+
+    const formData = new FormData()
+    formData.append('file', file)
+
+    try {
+      // Upload to our API endpoint
+      const res = await fetch(`/api/bunny/videos/${videoId}/upload`, {
+        method: 'PUT',
+        body: formData
+      })
+
+      if (!res.ok) throw new Error('Upload failed')
+
+      setUploadProgress(100)
+      queryClient.invalidateQueries({ queryKey: ['course', courseId] })
+      
+      setTimeout(() => {
+        setUploadProgress(null)
+        setIsUploading(false)
+      }, 1000)
+    } catch (error) {
+      console.error('Upload error:', error)
+      setIsUploading(false)
+      setUploadProgress(null)
+    }
   }
 
   if (isLoading) {
@@ -305,27 +337,14 @@ export default function CourseEditorPage() {
               <h3 className="font-medium text-gray-900 mb-4">Add New Video</h3>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Video Title *</label>
                   <input
                     type="text"
                     value={newVideoTitle}
                     onChange={(e) => setNewVideoTitle(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                    placeholder="Video title"
+                    placeholder="e.g., Introduction to Marketing"
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Bunny.net Video ID *</label>
-                  <input
-                    type="text"
-                    value={newVideoBunnyId}
-                    onChange={(e) => setNewVideoBunnyId(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                    placeholder="e.g., abc123-def456"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Find this in your Bunny Stream dashboard
-                  </p>
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -335,13 +354,28 @@ export default function CourseEditorPage() {
                     Cancel
                   </button>
                   <button
-                    onClick={handleAddVideo}
-                    disabled={addVideoMutation.isPending || !newVideoTitle || !newVideoBunnyId}
+                    onClick={handleCreateVideo}
+                    disabled={createVideoMutation.isPending || !newVideoTitle}
                     className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
                   >
-                    {addVideoMutation.isPending ? 'Adding...' : 'Add Video'}
+                    {createVideoMutation.isPending ? 'Creating...' : 'Create & Upload'}
                   </button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {uploadProgress !== null && (
+            <div className="mb-6">
+              <div className="flex justify-between text-sm mb-1">
+                <span>Uploading...⏳</span>
+                <span>{uploadProgress}%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className="bg-blue-600 h-2 rounded-full transition-all"
+                  style={{ width: `${uploadProgress}%` }}
+                />
               </div>
             </div>
           )}
@@ -351,26 +385,41 @@ export default function CourseEditorPage() {
               <p>No videos yet. Add your first video above.⬆️</p>
             </div>
           ) : (
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
-            >
-              <SortableContext
-                items={course.videos.map(v => v.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                <div className="space-y-3">
-                  {course.videos.map((video) => (
-                    <SortableVideoItem
-                      key={video.id}
-                      video={video}
-                      onDelete={(id) => deleteVideoMutation.mutate(id)}
-                    />
-                  ))}
+            <div className="space-y-3">
+              {course.videos.map((video) => (
+                <div
+                  key={video.id}
+                  className="bg-white border border-gray-200 rounded-lg p-4"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1">
+                      <h4 className="font-medium text-gray-900">{video.title}</h4>
+                      <p className="text-sm text-gray-500">Bunny ID: {video.bunnyId}</p>
+                    </div>
+                    <label className="cursor-pointer">
+                      <input
+                        type="file"
+                        accept="video/*"
+                        className="hidden"
+                        onChange={(e) => handleFileUpload(e, video.bunnyId)}
+                        disabled={isUploading}
+                      />
+                      <span className="bg-blue-50 text-blue-600 px-3 py-1 rounded text-sm hover:bg-blue-100">
+                        {isUploading ? 'Uploading...' : 'Upload'}
+                      </span>
+                    </label>
+                    <button
+                      onClick={() => deleteVideoMutation.mutate(video.id)}
+                      className="text-red-500 hover:text-red-700 p-2"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
-              </SortableContext>
-            </DndContext>
+              ))}
+            </div>
           )}
         </div>
       </main>
