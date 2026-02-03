@@ -50,6 +50,7 @@ interface UploadingVideo {
   title: string
   bunnyId: string
   uploadUrl: string
+  apiKey: string
   progress: number
   status: 'uploading' | 'processing' | 'done' | 'error'
   error?: string
@@ -213,6 +214,7 @@ export default function CourseEditorPage() {
         title: data.video.title,
         bunnyId: data.videoId,
         uploadUrl: data.uploadUrl,
+        apiKey: data.apiKey,
         progress: 0,
         status: 'uploading'
       }])
@@ -297,8 +299,7 @@ export default function CourseEditorPage() {
       })
 
       xhr.open('PUT', uploadingVideo.uploadUrl)
-      // Bunny Stream upload doesn't need auth header when using the upload URL
-      // The uploadUrl contains a signed token
+      xhr.setRequestHeader('AccessKey', uploadingVideo.apiKey)
       xhr.send(file)
     } catch (error) {
       console.error('Upload error:', error)

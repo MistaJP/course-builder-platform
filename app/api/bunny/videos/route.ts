@@ -32,11 +32,12 @@ export async function POST(request: NextRequest) {
       }
     })
     
-    // Return the direct upload URL for client-side upload
+    // Return the direct upload URL and API key for client-side upload
     return NextResponse.json({
       video,
       uploadUrl: bunnyVideo.uploadUrl,
-      videoId: bunnyVideo.guid
+      videoId: bunnyVideo.guid,
+      apiKey: process.env.BUNNY_API_KEY // Safe to expose for upload only
     }, { status: 201 })
   } catch (error) {
     console.error('Error creating video:', error)
