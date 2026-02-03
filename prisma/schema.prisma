@@ -1,0 +1,52 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model App {
+  id          String   @id @default(cuid())
+  name        String
+  apiKey      String   @unique @default(cuid())
+  domains     String[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  courses     Course[]
+}
+
+model Course {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  thumbnail   String?
+  published   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  appId       String
+  app         App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+  
+  videos      Video[]
+  
+  @@index([appId])
+}
+
+model Video {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  bunnyId     String
+  duration    Int?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  courseId    String
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  
+  @@index([courseId])
+  @@index([bunnyId])
+}
