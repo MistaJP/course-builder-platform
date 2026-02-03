@@ -17,16 +17,20 @@ export async function PUT(
       )
     }
 
+    console.log('Uploading file:', file.name, 'Size:', file.size, 'Type:', file.type)
+
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
     
-    await uploadVideo(id, buffer)
+    await uploadVideo(id, buffer, file.type)
     
-    return NextResponse.json({ success: true })
+    console.log('Upload successful for video:', id)
+    
+    return NextResponse.json({ success: true, message: 'Upload complete' })
   } catch (error) {
     console.error('Error uploading video:', error)
     return NextResponse.json(
-      { error: 'Failed to upload video' },
+      { error: 'Failed to upload video', details: (error as Error).message },
       { status: 500 }
     )
   }

@@ -25,7 +25,8 @@ export async function createVideo(title: string): Promise<{ guid: string; upload
   })
 
   if (!res.ok) {
-    throw new Error(`Bunny API error: ${res.status}`)
+    const error = await res.text()
+    throw new Error(`Bunny API error: ${res.status} - ${error}`)
   }
 
   const data = await res.json()
@@ -35,17 +36,25 @@ export async function createVideo(title: string): Promise<{ guid: string; upload
   }
 }
 
-export async function uploadVideo(videoId: string, file: Buffer | Blob): Promise<void> {
+export async function uploadVideo(videoId: string, file: Buffer, contentType?: string): Promise<void> {
+  const headers: Record<string, string> = {
+    'AccessKey': BUNNY_API_KEY!,
+  }
+  
+  // Bunny needs content-type for proper processing
+  if (contentType) {
+    headers['Content-Type'] = contentType
+  }
+
   const res = await fetch(`${BUNNY_BASE_URL}/${BUNNY_LIBRARY_ID}/videos/${videoId}`, {
     method: 'PUT',
-    headers: {
-      'AccessKey': BUNNY_API_KEY!,
-    },
+    headers,
     body: file
   })
 
   if (!res.ok) {
-    throw new Error(`Upload failed: ${res.status}`)
+    const error = await res.text()
+    throw new Error(`Upload failed: ${res.status} - ${error}`)
   }
 }
 
