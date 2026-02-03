@@ -26,7 +26,8 @@ interface Course {
 }
 
 async function fetchCourse(id: string): Promise<Course> {
-  const res = await fetch(`/api/public/courses/${id}`)
+  // Use admin API for now (public API requires API key)
+  const res = await fetch(`/api/courses/${id}`)
   if (!res.ok) throw new Error('Failed to fetch course')
   return res.json()
 }
