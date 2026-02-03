@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -43,6 +43,15 @@ interface Course {
     name: string
     apiKey: string
   }
+}
+
+interface UploadingVideo {
+  id: string
+  title: string
+  bunnyId: string
+  uploadUrl: string
+  progress: number
+  status: 'uploading' | 'processing' | 'done' | 'error'
 }
 
 async function fetchCourse(id: string): Promise<Course> {
@@ -146,8 +155,8 @@ export default function CourseEditorPage() {
   const courseId = params.id as string
   const [showAddVideo, setShowAddVideo] = useState(false)
   const [newVideoTitle, setNewVideoTitle] = useState('')
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
-  const [isUploading, setIsUploading] = useState(false)
+  const [uploadingVideos, setUploadingVideos] = useState<UploadingVideo[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { data: course, isLoading } = useQuery({
     queryKey: ['course', courseId],
@@ -192,10 +201,25 @@ export default function CourseEditorPage() {
       if (!res.ok) throw new Error('Failed to create video')
       return res.json()
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['course', courseId] })
       setShowAddVideo(false)
       setNewVideoTitle('')
+      
+      // Add to uploading videos list and trigger file picker
+      setUploadingVideos(prev => [...prev, {
+        id: data.video.id,
+        title: data.video.title,
+        bunnyId: data.videoId,
+        uploadUrl: data.uploadUrl,
+        progress: 0,
+        status: 'uploading'
+      }])
+      
+      // Open file picker after a short delay
+      setTimeout(() => {
+        fileInputRef.current?.click()
+      }, 100)
     }
   })
 
@@ -222,37 +246,87 @@ export default function CourseEditorPage() {
     })
   }
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, videoId: string) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file) return
+    if (!file || uploadingVideos.length === 0) return
 
-    setIsUploading(true)
-    setUploadProgress(0)
-
-    const formData = new FormData()
-    formData.append('file', file)
+    const uploadingVideo = uploadingVideos[uploadingVideos.length - 1]
+    
+    setUploadingVideos(prev => 
+      prev.map(v => v.id === uploadingVideo.id ? { ...v, status: 'uploading' } : v)
+    )
 
     try {
-      // Upload to our API endpoint
-      const res = await fetch(`/api/bunny/videos/${videoId}/upload`, {
-        method: 'PUT',
-        body: formData
+      // Upload directly to Bunny
+      const xhr = new XMLHttpRequest()
+      
+      xhr.upload.addEventListener('progress', (event) => {
+        if (event.lengthComputable) {
+          const progress = Math.round((event.loaded / event.total) * 100)
+          setUploadingVideos(prev => 
+            prev.map(v => v.id === uploadingVideo.id ? { ...v, progress } : v)
+          )
+        }
+      })
+      
+      xhr.addEventListener('load', () => {
+        if (xhr.status === 200) {
+          setUploadingVideos(prev => 
+            prev.map(v => v.id === uploadingVideo.id ? { ...v, status: 'processing', progress: 100 } : v)
+          )
+          
+          // Poll for video processing status
+          pollVideoStatus(uploadingVideo.bunnyId, uploadingVideo.id)
+          
+          queryClient.invalidateQueries({ queryKey: ['course', courseId] })
+        } else {
+          setUploadingVideos(prev => 
+            prev.map(v => v.id === uploadingVideo.id ? { ...v, status: 'error' } : v)
+          )
+        }
+      })
+      
+      xhr.addEventListener('error', () => {
+        setUploadingVideos(prev => 
+          prev.map(v => v.id === uploadingVideo.id ? { ...v, status: 'error' } : v)
+        )
       })
 
-      if (!res.ok) throw new Error('Upload failed')
-
-      setUploadProgress(100)
-      queryClient.invalidateQueries({ queryKey: ['course', courseId] })
-      
-      setTimeout(() => {
-        setUploadProgress(null)
-        setIsUploading(false)
-      }, 1000)
+      xhr.open('PUT', uploadingVideo.uploadUrl)
+      // Bunny Stream upload doesn't need auth header when using the upload URL
+      // The uploadUrl contains a signed token
+      xhr.send(file)
     } catch (error) {
       console.error('Upload error:', error)
-      setIsUploading(false)
-      setUploadProgress(null)
+      setUploadingVideos(prev => 
+        prev.map(v => v.id === uploadingVideo.id ? { ...v, status: 'error' } : v)
+      )
     }
+  }
+
+  const pollVideoStatus = async (bunnyId: string, videoId: string) => {
+    const checkStatus = async () => {
+      try {
+        const res = await fetch(`/api/bunny/videos?bunnyId=${bunnyId}`)
+        if (!res.ok) return
+        
+        const data = await res.json()
+        
+        if (data.isReady) {
+          setUploadingVideos(prev => 
+            prev.map(v => v.id === videoId ? { ...v, status: 'done' } : v)
+          )
+          queryClient.invalidateQueries({ queryKey: ['course', courseId] })
+        } else {
+          // Check again in 5 seconds
+          setTimeout(checkStatus, 5000)
+        }
+      } catch (error) {
+        console.error('Error checking status:', error)
+      }
+    }
+    
+    setTimeout(checkStatus, 5000)
   }
 
   if (isLoading) {
@@ -267,6 +341,14 @@ export default function CourseEditorPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="video/*"
+        className="hidden"
+        onChange={handleFileSelect}
+      />
+
       <header className="bg-white border-b border-gray-200">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
@@ -327,6 +409,43 @@ export default function CourseEditorPage() {
           </div>
         </div>
 
+        {/* Uploading Videos */}
+        {uploadingVideos.length > 0 && (
+          <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Uploading Videos</h2>
+            <div className="space-y-4">
+              {uploadingVideos.map((video) => (
+                <div key={video.id} className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium">{video.title}</span>
+                    <span className={`text-sm ${
+                      video.status === 'done' ? 'text-green-600' :
+                      video.status === 'error' ? 'text-red-600' :
+                      video.status === 'processing' ? 'text-yellow-600' :
+                      'text-blue-600'
+                    }`}>
+                      {video.status === 'done' ? '✓ Ready' :
+                       video.status === 'error' ? '✗ Failed' :
+                       video.status === 'processing' ? 'Processing...' :
+                       `${video.progress}%`}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className={`h-2 rounded-full transition-all ${
+                        video.status === 'done' ? 'bg-green-500' :
+                        video.status === 'error' ? 'bg-red-500' :
+                        'bg-blue-600'
+                      }`}
+                      style={{ width: `${video.progress}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Videos Section */}
         <div className="bg-white rounded-lg border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-6">
@@ -372,61 +491,31 @@ export default function CourseEditorPage() {
             </div>
           )}
 
-          {uploadProgress !== null && (
-            <div className="mb-6">
-              <div className="flex justify-between text-sm mb-1">
-                <span>Uploading...⏳</span>
-                <span>{uploadProgress}%</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className="bg-blue-600 h-2 rounded-full transition-all"
-                  style={{ width: `${uploadProgress}%` }}
-                />
-              </div>
-            </div>
-          )}
-
           {course.videos.length === 0 ? (
             <div className="text-center py-12 text-gray-500">
               <p>No videos yet. Add your first video above.⬆️</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {course.videos.map((video) => (
-                <div
-                  key={video.id}
-                  className="bg-white border border-gray-200 rounded-lg p-4"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="flex-1">
-                      <h4 className="font-medium text-gray-900">{video.title}</h4>
-                      <p className="text-sm text-gray-500">Bunny ID: {video.bunnyId}</p>
-                    </div>
-                    <label className="cursor-pointer">
-                      <input
-                        type="file"
-                        accept="video/*"
-                        className="hidden"
-                        onChange={(e) => handleFileUpload(e, video.bunnyId)}
-                        disabled={isUploading}
-                      />
-                      <span className="bg-blue-50 text-blue-600 px-3 py-1 rounded text-sm hover:bg-blue-100">
-                        {isUploading ? 'Uploading...' : 'Upload'}
-                      </span>
-                    </label>
-                    <button
-                      onClick={() => deleteVideoMutation.mutate(video.id)}
-                      className="text-red-500 hover:text-red-700 p-2"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </div>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={course.videos.map(v => v.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-3">
+                  {course.videos.map((video) => (
+                    <SortableVideoItem
+                      key={video.id}
+                      video={video}
+                      onDelete={(id) => deleteVideoMutation.mutate(id)}
+                    />
+                  ))}
                 </div>
-              ))}
-            </div>
+              </SortableContext>
+            </DndContext>
           )}
         </div>
       </main>

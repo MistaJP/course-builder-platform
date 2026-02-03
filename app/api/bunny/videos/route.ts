@@ -1,19 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createVideo, listVideos } from '@/lib/bunny'
+import { createVideo, getVideo } from '@/lib/bunny'
 import { prisma } from '@/lib/prisma'
-
-export async function GET() {
-  try {
-    const videos = await listVideos()
-    return NextResponse.json(videos)
-  } catch (error) {
-    console.error('Error listing videos:', error)
-    return NextResponse.json(
-      { error: 'Failed to list videos' },
-      { status: 500 }
-    )
-  }
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -45,14 +32,46 @@ export async function POST(request: NextRequest) {
       }
     })
     
+    // Return the direct upload URL for client-side upload
     return NextResponse.json({
       video,
-      uploadUrl: bunnyVideo.uploadUrl
+      uploadUrl: bunnyVideo.uploadUrl,
+      videoId: bunnyVideo.guid
     }, { status: 201 })
   } catch (error) {
     console.error('Error creating video:', error)
     return NextResponse.json(
-      { error: 'Failed to create video' },
+      { error: 'Failed to create video', details: (error as Error).message },
+      { status: 500 }
+    )
+  }
+}
+
+// Check video status after upload
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const bunnyId = searchParams.get('bunnyId')
+    
+    if (!bunnyId) {
+      return NextResponse.json(
+        { error: 'bunnyId required' },
+        { status: 400 }
+      )
+    }
+    
+    const videoInfo = await getVideo(bunnyId)
+    
+    return NextResponse.json({
+      status: videoInfo.status,
+      length: videoInfo.length,
+      thumbnailFileName: videoInfo.thumbnailFileName,
+      isReady: videoInfo.status === 3 // 3 = ready in Bunny
+    })
+  } catch (error) {
+    console.error('Error getting video status:', error)
+    return NextResponse.json(
+      { error: 'Failed to get video status' },
       { status: 500 }
     )
   }
