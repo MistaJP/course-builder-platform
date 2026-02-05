@@ -2,6 +2,14 @@
 const HEYGEN_API_KEY = process.env.HEYGEN_API_KEY
 const HEYGEN_BASE_URL = 'https://api.heygen.com/v2'
 
+// Validate API key is configured
+function getApiKey(): string {
+  if (!HEYGEN_API_KEY) {
+    throw new Error('HEYGEN_API_KEY environment variable is not set')
+  }
+  return HEYGEN_API_KEY
+}
+
 interface Avatar {
   avatar_id: string
   avatar_name: string
@@ -45,7 +53,7 @@ interface VideoStatus {
 export async function listAvatars(): Promise<Avatar[]> {
   const res = await fetch(`${HEYGEN_BASE_URL}/avatars`, {
     headers: {
-      'Authorization': `Bearer ${HEYGEN_API_KEY}`,
+      'X-Api-Key': getApiKey(),
       'Content-Type': 'application/json'
     }
   })
@@ -62,7 +70,7 @@ export async function listAvatars(): Promise<Avatar[]> {
 export async function listVoices(): Promise<Voice[]> {
   const res = await fetch(`${HEYGEN_BASE_URL}/voices`, {
     headers: {
-      'Authorization': `Bearer ${HEYGEN_API_KEY}`,
+      'X-Api-Key': getApiKey(),
       'Content-Type': 'application/json'
     }
   })
@@ -80,7 +88,7 @@ export async function generateVideo(input: GenerateVideoInput): Promise<{ video_
   const res = await fetch(`${HEYGEN_BASE_URL}/video/generate`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${HEYGEN_API_KEY}`,
+      'X-Api-Key': getApiKey(),
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
@@ -122,7 +130,7 @@ export async function generateVideo(input: GenerateVideoInput): Promise<{ video_
 export async function getVideoStatus(videoId: string): Promise<VideoStatus> {
   const res = await fetch(`${HEYGEN_BASE_URL}/video/status?video_id=${videoId}`, {
     headers: {
-      'Authorization': `Bearer ${HEYGEN_API_KEY}`,
+      'X-Api-Key': getApiKey(),
       'Content-Type': 'application/json'
     }
   })
@@ -175,7 +183,7 @@ export async function deleteVideo(videoId: string): Promise<void> {
   const res = await fetch(`${HEYGEN_BASE_URL}/video/${videoId}`, {
     method: 'DELETE',
     headers: {
-      'Authorization': `Bearer ${HEYGEN_API_KEY}`,
+      'X-Api-Key': getApiKey(),
       'Content-Type': 'application/json'
     }
   })
