@@ -1,19 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { listAvatars, listVoices, generateVideo, getVideoStatus, pollVideoUntilComplete } from '@/lib/heygen'
+import { listAvatars, listVoices, generateVideo, getVideoStatus } from '@/lib/heygen'
 
-// GET /api/heygen/avatars - List available avatars
+// Read API key from env at request time
+function getApiKey(): string {
+  const apiKey = process.env.HEYGEN_API_KEY
+  if (!apiKey) {
+    throw new Error('HEYGEN_API_KEY environment variable is not set')
+  }
+  return apiKey
+}
+
+// GET /api/heygen?type=avatars - List available avatars
 export async function GET(request: NextRequest) {
   try {
+    const apiKey = getApiKey()
     const { searchParams } = new URL(request.url)
     const type = searchParams.get('type')
     
     if (type === 'avatars') {
-      const avatars = await listAvatars()
+      const avatars = await listAvatars(apiKey)
       return NextResponse.json({ avatars })
     }
     
     if (type === 'voices') {
-      const voices = await listVoices()
+      const voices = await listVoices(apiKey)
       return NextResponse.json({ voices })
     }
     
@@ -22,7 +32,7 @@ export async function GET(request: NextRequest) {
       if (!videoId) {
         return NextResponse.json({ error: 'videoId required' }, { status: 400 })
       }
-      const status = await getVideoStatus(videoId)
+      const status = await getVideoStatus(videoId, apiKey)
       return NextResponse.json(status)
     }
     
@@ -39,6 +49,7 @@ export async function GET(request: NextRequest) {
 // POST /api/heygen/generate - Generate a new video
 export async function POST(request: NextRequest) {
   try {
+    const apiKey = getApiKey()
     const body = await request.json()
     const { avatar_id, voice_id, script, background, dimension } = body
     
@@ -63,7 +74,7 @@ export async function POST(request: NextRequest) {
       script,
       background,
       dimension
-    })
+    }, apiKey)
     
     return NextResponse.json(result, { status: 201 })
   } catch (error) {

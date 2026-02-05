@@ -1,14 +1,7 @@
 // HeyGen API integration for AI avatar video generation
-const HEYGEN_API_KEY = process.env.HEYGEN_API_KEY
-const HEYGEN_BASE_URL = 'https://api.heygen.com/v2'
+// API key is passed from the API route, not read directly from env
 
-// Validate API key is configured
-function getApiKey(): string {
-  if (!HEYGEN_API_KEY) {
-    throw new Error('HEYGEN_API_KEY environment variable is not set')
-  }
-  return HEYGEN_API_KEY
-}
+const HEYGEN_BASE_URL = 'https://api.heygen.com/v2'
 
 interface Avatar {
   avatar_id: string
@@ -50,10 +43,10 @@ interface VideoStatus {
 }
 
 // Fetch available avatars
-export async function listAvatars(): Promise<Avatar[]> {
+export async function listAvatars(apiKey: string): Promise<Avatar[]> {
   const res = await fetch(`${HEYGEN_BASE_URL}/avatars`, {
     headers: {
-      'X-Api-Key': getApiKey(),
+      'X-Api-Key': apiKey,
       'Content-Type': 'application/json'
     }
   })
@@ -67,10 +60,10 @@ export async function listAvatars(): Promise<Avatar[]> {
 }
 
 // Fetch available voices
-export async function listVoices(): Promise<Voice[]> {
+export async function listVoices(apiKey: string): Promise<Voice[]> {
   const res = await fetch(`${HEYGEN_BASE_URL}/voices`, {
     headers: {
-      'X-Api-Key': getApiKey(),
+      'X-Api-Key': apiKey,
       'Content-Type': 'application/json'
     }
   })
@@ -84,7 +77,7 @@ export async function listVoices(): Promise<Voice[]> {
 }
 
 // Generate avatar video
-export async function generateVideo(input: GenerateVideoInput): Promise<{ video_id: string }> {
+export async function generateVideo(input: GenerateVideoInput, apiKey: string): Promise<{ video_id: string }> {
   const requestBody = {
     video_inputs: [{
       character: {
@@ -114,7 +107,7 @@ export async function generateVideo(input: GenerateVideoInput): Promise<{ video_
   const res = await fetch(`${HEYGEN_BASE_URL}/video/generate`, {
     method: 'POST',
     headers: {
-      'X-Api-Key': getApiKey(),
+      'X-Api-Key': apiKey,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify(requestBody)
@@ -132,10 +125,10 @@ export async function generateVideo(input: GenerateVideoInput): Promise<{ video_
 }
 
 // Check video status
-export async function getVideoStatus(videoId: string): Promise<VideoStatus> {
+export async function getVideoStatus(videoId: string, apiKey: string): Promise<VideoStatus> {
   const res = await fetch(`${HEYGEN_BASE_URL}/video/status?video_id=${videoId}`, {
     headers: {
-      'X-Api-Key': getApiKey(),
+      'X-Api-Key': apiKey,
       'Content-Type': 'application/json'
     }
   })
@@ -158,12 +151,13 @@ export async function getVideoStatus(videoId: string): Promise<VideoStatus> {
 // Poll until video is ready
 export async function pollVideoUntilComplete(
   videoId: string,
+  apiKey: string,
   onProgress?: (status: VideoStatus) => void
 ): Promise<VideoStatus> {
   return new Promise((resolve, reject) => {
     const check = async () => {
       try {
-        const status = await getVideoStatus(videoId)
+        const status = await getVideoStatus(videoId, apiKey)
         onProgress?.(status)
 
         if (status.status === 'completed') {
@@ -184,11 +178,11 @@ export async function pollVideoUntilComplete(
 }
 
 // Delete video
-export async function deleteVideo(videoId: string): Promise<void> {
+export async function deleteVideo(videoId: string, apiKey: string): Promise<void> {
   const res = await fetch(`${HEYGEN_BASE_URL}/video/${videoId}`, {
     method: 'DELETE',
     headers: {
-      'X-Api-Key': getApiKey(),
+      'X-Api-Key': apiKey,
       'Content-Type': 'application/json'
     }
   })
