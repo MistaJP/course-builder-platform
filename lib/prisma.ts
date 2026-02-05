@@ -1,17 +1,21 @@
 import { PrismaClient } from '@prisma/client'
 
-// Validate DATABASE_URL is set
-const databaseUrl = process.env.DATABASE_URL
-if (!databaseUrl) {
-  throw new Error('DATABASE_URL environment variable is not set')
-}
-
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
-export const prisma = globalForPrisma.prisma ?? new PrismaClient({
-  datasourceUrl: databaseUrl
-})
+function getPrismaClient(): PrismaClient {
+  if (!globalForPrisma.prisma) {
+    globalForPrisma.prisma = new PrismaClient()
+  }
+  return globalForPrisma.prisma
+}
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+// Export a proxy that lazily initializes the client
+// This prevents build-time errors when DATABASE_URL isn't available
+export const prisma = new Proxy({} as PrismaClient, {
+  get(_target, prop) {
+    const client = getPrismaClient()
+    return (client as any)[prop]
+  }
+})
