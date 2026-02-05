@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('HeyGen generate error:', error)
     return NextResponse.json(
-      { error: (error as Error).message },
+      { error: 'Video generation failed', details: (error as Error).message },
       { status: 500 }
     )
   }

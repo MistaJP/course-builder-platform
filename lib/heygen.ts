@@ -85,44 +85,49 @@ export async function listVoices(): Promise<Voice[]> {
 
 // Generate avatar video
 export async function generateVideo(input: GenerateVideoInput): Promise<{ video_id: string }> {
+  const requestBody = {
+    video_inputs: [{
+      character: {
+        type: 'avatar',
+        avatar_id: input.avatar_id,
+        avatar_style: 'normal'
+      },
+      voice: {
+        type: 'text',
+        voice_id: input.voice_id,
+        input_text: input.script,
+        speed: 1.0
+      },
+      background: input.background || {
+        type: 'color',
+        value: '#ffffff'
+      }
+    }],
+    dimension: input.dimension || {
+      width: 1920,
+      height: 1080
+    }
+  }
+
+  console.log('HeyGen request:', JSON.stringify(requestBody, null, 2))
+
   const res = await fetch(`${HEYGEN_BASE_URL}/video/generate`, {
     method: 'POST',
     headers: {
       'X-Api-Key': getApiKey(),
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({
-      video_inputs: [{
-        character: {
-          type: 'avatar',
-          avatar_id: input.avatar_id,
-          avatar_style: 'normal'
-        },
-        voice: {
-          type: 'text',
-          voice_id: input.voice_id,
-          input_text: input.script,
-          speed: 1.0
-        },
-        background: input.background || {
-          type: 'color',
-          value: '#ffffff'
-        },
-        ...input.dimension
-      }],
-      dimension: input.dimension || {
-        width: 1920,
-        height: 1080
-      }
-    })
+    body: JSON.stringify(requestBody)
   })
 
   if (!res.ok) {
-    const error = await res.text()
-    throw new Error(`Failed to generate video: ${res.status} - ${error}`)
+    const errorText = await res.text()
+    console.error('HeyGen error response:', res.status, errorText)
+    throw new Error(`HeyGen API error ${res.status}: ${errorText}`)
   }
 
   const data = await res.json()
+  console.log('HeyGen success response:', data)
   return { video_id: data.data.video_id }
 }
 
